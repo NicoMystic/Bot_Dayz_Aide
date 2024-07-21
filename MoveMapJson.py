@@ -69,23 +69,17 @@ async def on_message(message):
     else:
         await bot.process_commands(message)
 
+# Fonction pour convertir les angles d'Euler en matrice de rotation
 def euler_to_matrix(yaw, pitch, roll):
-    # Convert degrees to radians
     yaw, pitch, roll = np.deg2rad([yaw, pitch, roll])
-    
-    # Compute rotation matrix components
     cy, sy = np.cos(yaw), np.sin(yaw)
     cp, sp = np.cos(pitch), np.sin(pitch)
     cr, sr = np.cos(roll), np.sin(roll)
-    
-    # Create rotation matrix
-    rotation_matrix = np.array([
+    return np.array([
         [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
         [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
         [-sp, cp * sr, cp * cr]
     ])
-    
-    return rotation_matrix
 
 # Déplacer l'objet principal et les objets associés
 async def deplacer_objets(channel, filename, objet_principal, coordonnees, orientations):
@@ -103,24 +97,21 @@ async def deplacer_objets(channel, filename, objet_principal, coordonnees, orien
             await channel.send(f"Objet principal {objet_principal} non trouvé dans le fichier JSON.")
             return
 
-        dx = coordonnees[0] - objet_principal_data['pos'][0]
-        dy = coordonnees[1] - objet_principal_data['pos'][1]
-        dz = coordonnees[2] - objet_principal_data['pos'][2]
+        # Calculer la différence de position
+        diff_xyz = np.array(coordonnees) - np.array(objet_principal_data['pos'])
 
-        rotation_matrix = euler_to_matrix(*orientations)
+        # Mettre à jour les coordonnées et l'orientation de l'objet principal
+        objet_principal_data['pos'] = coordonnees
+        objet_principal_data['ypr'] = orientations
 
         for obj in data['Objects']:
             if obj != objet_principal_data:
-                # Calculate relative position
+                # Calculer la position relative par rapport à l'objet principal initial
                 relative_pos = np.array(obj['pos']) - np.array(objet_principal_data['pos'])
-                
-                # Apply rotation
-                new_pos = np.dot(rotation_matrix, relative_pos) + np.array(coordonnees)
-                
-                obj['pos'] = new_pos.tolist()
-            else:
-                obj['pos'] = coordonnees
-                obj['ypr'] = orientations
+                # Mettre à jour la position en ajoutant la différence
+                obj['pos'] = (relative_pos + np.array(coordonnees)).tolist()
+                # Conserver les orientations des objets
+                obj['ypr'] = obj['ypr']
 
         new_filename = f"{filename.split('.')[0]}_Final.json"
         with open(new_filename, 'w') as file:
